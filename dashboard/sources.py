@@ -7,6 +7,7 @@ A missing or unreadable source returns None and the dashboard shows that section
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from pathlib import Path
 
@@ -115,7 +116,8 @@ def read_robot(path: str | Path | None) -> dict | None:
     if not path or not Path(path).exists():
         return None
     tasks = [{"task": r["Task"], "item": r["Item"], "status": str(r["Status"]).lower(),
-              "result": Path(str(r["Result"])).name if r["Result"] and r["Task"] == "report" else (r["Result"] or ""),
+              # Keep only the file name; the export may come from Windows (\) or Linux (/).
+              "result": re.split(r"[\\/]", str(r["Result"]))[-1] if r["Result"] and r["Task"] == "report" else (r["Result"] or ""),
               "details": r["Details"] or "", "attempts": int(r["Attempts"] or 0), "seconds": float(r["Seconds"] or 0)}
              for r in _rows(Path(path), "Run summary")]
     count = {s: sum(1 for t in tasks if t["status"] == s) for s in ("done", "rejected", "failed")}
