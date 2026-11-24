@@ -1,0 +1,70 @@
+name: refresh dashboard
+
+# Runs the four automations from their own repositories, collects their exports
+# and publishes the dashboard to GitHub Pages. Weekly, on every push, or by hand.
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Get the four automations
+        run: |
+          for repo in hour-bank-checker payroll-reconciliation einvoice-reader portal-robot; do
+            git clone --depth 1 "https://github.com/alelexand/$repo.git" "tools/$repo"
+          done
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install
+        run: |
+          pip install -r requirements.txt
+          for repo in tools/*; do pip install -r "$repo/requirements.txt"; done
+          python -m playwright install --with-deps chromium
+
+      - name: Run the automations
+        run: |
+          mkdir -p inputs
+          PYTHONPATH=tools/hour-bank-checker python -m hour_bank report --data tools/hour-bank-checker/sample_data --out inputs
+          PYTHONPATH=tools/payroll-reconciliation python -m payroll_check compare \
+            --a tools/payroll-reconciliation/sample_data/hr_system.csv \
+            --b tools/payroll-reconciliation/sample_data/payroll_provider.csv \
+            --items tools/payroll-reconciliation/sample_data/items.csv --period 2026-10 --out inputs
+          PYTHONPATH=tools/einvoice-reader python -m einvoice read tools/einvoice-reader/sample_invoices --out inputs
+          # The robot exits with 1 when an item fails; failures are data for the dashboard, not a broken build.
+          PYTHONPATH=tools/portal-robot python -m portal_robot demo --out inputs/robot || echo "robot reported failed items"
+
+      - name: Build the dashboard
+        run: python -m dashboard --inputs inputs --period "October 2026 (sample month)" --out site/index.html
+
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

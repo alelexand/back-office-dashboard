@@ -1,0 +1,12 @@
+[project]
+name = "back-office-dashboard"
+version = "1.0.0"
+description = "One page with the results of four back-office automations and one list of what people must fix."
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{ name = "Alexandre Lasse" }]
+dependencies = ["openpyxl>=3.1"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
